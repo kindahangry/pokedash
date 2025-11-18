@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   const cookieStore = await cookies();
-  const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
+  // Sidebar is open by default, cookie stores the state
+  // If cookie exists and is "false", sidebar is closed; otherwise it's open
+  const sidebarState = cookieStore.get("sidebar_state")?.value;
+  const defaultOpen = sidebarState !== "false";
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>

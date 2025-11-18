@@ -7,7 +7,7 @@ export const APP_CONFIG = {
   version: packageJson.version,
   copyright: `© ${currentYear}, PokeDash.`,
   meta: {
-    title: "PokeDash - Pokemon Analytics Dashboard",
+    title: "PokeDash",
     description:
       "PokeDash is a Pokemon analytics dashboard built with Next.js 15, Tailwind CSS v4, and shadcn/ui.",
   },

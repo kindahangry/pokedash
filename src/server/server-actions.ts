@@ -381,6 +381,17 @@ async function fetchCardsData(
 
   if (cardsError) {
     console.error("Error fetching cards:", cardsError);
+    console.error("Error details:", {
+      message: cardsError.message,
+      details: cardsError.details,
+      hint: cardsError.hint,
+      code: cardsError.code,
+    });
+    if (cardsError.code === "PGRST301" || cardsError.message.includes("permission denied")) {
+      console.error("⚠️ RLS Policy Issue: The 'cards' table may not have a public read policy.");
+      console.error("Run this SQL in Supabase:");
+      console.error("CREATE POLICY \"Allow public read access\" ON public.cards FOR SELECT USING (true);");
+    }
     return null;
   }
 
@@ -388,6 +399,10 @@ async function fetchCardsData(
 
   if (!cardsData || cardsData.length === 0) {
     console.error("No cards found in cards table");
+    console.error("This could mean:");
+    console.error("1. The table is empty");
+    console.error("2. RLS policies are blocking access");
+    console.error("3. The table doesn't exist");
     return null;
   }
 
@@ -447,13 +462,17 @@ export async function getIndexCards(): Promise<IndexCard[]> {
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error("Missing Supabase environment variables");
+      console.error("NEXT_PUBLIC_SUPABASE_URL:", supabaseUrl ? "present" : "missing");
+      console.error("NEXT_PUBLIC_SUPABASE_ANON_KEY:", supabaseAnonKey ? "present" : "missing");
       return [];
     }
 
+    console.log("Fetching index cards from Supabase...");
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const cardsData = await fetchCardsData(supabase);
 
     if (!cardsData) {
+      console.error("Failed to fetch cards data - check RLS policies and database connection");
       return [];
     }
 

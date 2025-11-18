@@ -321,7 +321,8 @@ async function fetchAndProcessRecentPrices(
   // Group prices by card_id and take the 2 most recent for each card
   const pricesByCard = new Map<string, Array<{ date: string; price_usd: number }>>();
 
-  allRecentPrices.forEach((price) => {
+  type PriceRecord = { card_id: string; date: string | Date; price_usd: number };
+  (allRecentPrices as PriceRecord[]).forEach((price) => {
     if (!pricesByCard.has(price.card_id)) {
       pricesByCard.set(price.card_id, []);
     }

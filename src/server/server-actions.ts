@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export async function getValueFromCookie(key: string): Promise<string | undefined> {
   const cookieStore = await cookies();
@@ -292,7 +292,7 @@ function processTodayYesterdayPrices(
 }
 
 async function fetchAndProcessRecentPrices(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any>,
   cardsNeedingPrices: string[],
   priceMap: PriceMap,
 ): Promise<void> {
@@ -328,8 +328,13 @@ async function fetchAndProcessRecentPrices(
     }
     const cardPriceList = pricesByCard.get(price.card_id)!;
     if (cardPriceList.length < 2) {
+      // Convert date to string format (YYYY-MM-DD)
+      const dateStr =
+        typeof price.date === "string"
+          ? price.date.split("T")[0]
+          : price.date.toISOString().split("T")[0];
       cardPriceList.push({
-        date: typeof price.date === "string" ? price.date.split("T")[0] : price.date,
+        date: dateStr,
         price_usd: Number(price.price_usd),
       });
     }
@@ -367,7 +372,7 @@ function combineCardsWithPrices(
 }
 
 async function fetchCardsData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any>,
 ): Promise<Array<{ card_id: string; name: string; image_url: string | null }> | null> {
   const { data: cardsData, error: cardsError } = await supabase
     .from("cards")
@@ -390,7 +395,7 @@ async function fetchCardsData(
 }
 
 async function fetchTodayYesterdayPrices(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any>,
   cardIds: string[],
   today: string,
   yesterday: string,

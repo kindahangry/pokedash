@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { getIndexCards } from "@/server/server-actions";
@@ -60,20 +60,26 @@ export default async function MarketPage() {
                   {/* 24h Change */}
                   <div
                     className={`flex items-center gap-1 text-sm font-medium ${
-                      card.change_24h >= 0 ? "text-green-600" : "text-red-600"
+                      card.change_24h > 0
+                        ? "text-green-600"
+                        : card.change_24h < 0
+                          ? "text-red-600"
+                          : "text-gray-500"
                     }`}
                   >
-                    {card.change_24h >= 0 ? (
+                    {card.change_24h > 0 ? (
                       <TrendingUp className="h-4 w-4" />
-                    ) : (
+                    ) : card.change_24h < 0 ? (
                       <TrendingDown className="h-4 w-4" />
+                    ) : (
+                      <Minus className="h-4 w-4" />
                     )}
                     <span>
-                      {card.change_24h >= 0 ? "+" : ""}
+                      {card.change_24h > 0 ? "+" : ""}
                       {card.change_24h_percent.toFixed(2)}%
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      ({card.change_24h >= 0 ? "+" : ""}${card.change_24h.toFixed(2)})
+                      ({card.change_24h > 0 ? "+" : ""}${card.change_24h.toFixed(2)})
                     </span>
                   </div>
                 </div>

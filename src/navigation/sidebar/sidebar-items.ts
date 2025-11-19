@@ -39,6 +39,7 @@ export const sidebarItems: NavGroup[] = [
         title: "Vendor",
         url: "/dashboard/vendor",
         icon: Store,
+        comingSoon: true,
       },
       {
         title: "Vault",
@@ -50,6 +51,7 @@ export const sidebarItems: NavGroup[] = [
         title: "About",
         url: "/dashboard/about",
         icon: Info,
+        comingSoon: true,
       },
     ],
   },

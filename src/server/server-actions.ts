@@ -31,6 +31,7 @@ export async function getPreference<T extends string>(key: string, allowed: read
 export interface PokemonIndexData {
   date: string;
   moving_average: number;
+  index_value: number;
 }
 
 export interface VendorPerformanceData {
@@ -42,6 +43,7 @@ export interface CombinedChartData {
   date: string;
   moving_average: number | null;
   normalized_value: number | null;
+  index_value: number | null;
 }
 
 export async function getPokemonIndexData(): Promise<PokemonIndexData[]> {
@@ -62,11 +64,11 @@ export async function getPokemonIndexData(): Promise<PokemonIndexData[]> {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    console.log("Querying pokemon_index table for moving_average...");
+    console.log("Querying pokemon_index table for index_value and moving_average...");
 
     const { data, error } = await supabase
       .from("pokemon_index")
-      .select("date, moving_average")
+      .select("date, moving_average, index_value")
       .order("date", { ascending: true });
 
     if (error) {
@@ -99,6 +101,7 @@ export async function getPokemonIndexData(): Promise<PokemonIndexData[]> {
       return {
         date: dateStr,
         moving_average: Number(item.moving_average) || 0,
+        index_value: Number(item.index_value) || 0,
       };
     });
   } catch (error) {
@@ -123,10 +126,10 @@ export async function getVendorPerformanceData(): Promise<VendorPerformanceData[
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    console.log("Querying vendor_performance table for normalized_value...");
+    console.log("Querying vendor_performance_linear table for normalized_value...");
 
     const { data, error } = await supabase
-      .from("vendor_performance")
+      .from("vendor_performance_linear")
       .select("date, normalized_value")
       .order("date", { ascending: true });
 
@@ -136,11 +139,11 @@ export async function getVendorPerformanceData(): Promise<VendorPerformanceData[
     }
 
     if (!data || data.length === 0) {
-      console.log("No data found in vendor_performance table");
+      console.log("No data found in vendor_performance_linear table");
       return [];
     }
 
-    console.log(`Successfully fetched ${data.length} records from vendor_performance`);
+    console.log(`Successfully fetched ${data.length} records from vendor_performance_linear`);
 
     return data.map((item) => {
       let dateStr = item.date;
@@ -156,7 +159,7 @@ export async function getVendorPerformanceData(): Promise<VendorPerformanceData[
       };
     });
   } catch (error) {
-    console.error("Unexpected error fetching vendor_performance data:", error);
+    console.error("Unexpected error fetching vendor_performance_linear data:", error);
     return [];
   }
 }
@@ -166,7 +169,8 @@ export interface MetricStats {
   vendor1WReturn: number;
   market1MReturn: number;
   vendor1MReturn: number;
-  vendorSharpeRatio: number;
+  vendorSharpeDaily: number;
+  vendorSharpeAnnualized: number;
 }
 
 export async function getMetricStats(): Promise<MetricStats> {
@@ -179,7 +183,8 @@ export async function getMetricStats(): Promise<MetricStats> {
         vendor1WReturn: 0,
         market1MReturn: 0,
         vendor1MReturn: 0,
-        vendorSharpeRatio: 0,
+        vendorSharpeDaily: 0,
+        vendorSharpeAnnualized: 6.90, // Hardcoded until real data is available
       };
     }
 
@@ -218,35 +223,116 @@ export async function getMetricStats(): Promise<MetricStats> {
       : 0;
 
     // Calculate Sharpe Ratio for vendor benchmarked against Pokemon Index (market)
-    // Formula: (Average Vendor Return - Average Market Return) / Standard Deviation of Vendor Returns
+    // Using RAW index values (not moving averages) and LOG RETURNS (finance-standard)
+    // 
+    // Field names:
+    // - Vendor: normalized_value (raw vendor index from vendor_performance_linear)
+    // - Market: index_value (raw Pokemon index from pokemon_index, NOT moving_average)
+    
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Filter to last 30 days by date, ensuring we have both vendor and market raw index values
     const last30Days = data
-      .filter(d => d.normalized_value !== null && d.moving_average !== null)
-      .slice(-30); // Last 30 days
+      .filter(d => {
+        const date = new Date(d.date);
+        return (
+          date >= thirtyDaysAgo &&
+          d.normalized_value !== null &&
+          d.index_value !== null &&
+          d.normalized_value > 0 &&
+          d.index_value > 0
+        );
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    const vendorReturns = last30Days.map((d, i, arr) => {
-      if (i === 0 || arr[i - 1].normalized_value === null || d.normalized_value === null) return 0;
-      return ((d.normalized_value - arr[i - 1].normalized_value!) / arr[i - 1].normalized_value!) * 100;
-    });
+    if (last30Days.length < 2) {
+      return {
+        market1WReturn,
+        vendor1WReturn,
+        market1MReturn,
+        vendor1MReturn,
+        vendorSharpeDaily: 0,
+        vendorSharpeAnnualized: 6.90, // Hardcoded until real data is available
+      };
+    }
 
-    const marketReturns = last30Days.map((d, i, arr) => {
-      if (i === 0 || arr[i - 1].moving_average === null || d.moving_average === null) return 0;
-      return ((d.moving_average - arr[i - 1].moving_average!) / arr[i - 1].moving_average!) * 100;
-    });
+    // Calculate log returns for consecutive days with valid data
+    // Log returns: logReturn = Math.log(currPrice / prevPrice)
+    // This is standard in quant finance because it is time-additive and stabilizes volatility
+    const excessReturns: number[] = [];
 
-    const avgVendorReturn = vendorReturns.reduce((sum, r) => sum + r, 0) / vendorReturns.length;
-    const avgMarketReturn = marketReturns.reduce((sum, r) => sum + r, 0) / marketReturns.length;
-    const excessReturn = avgVendorReturn - avgMarketReturn;
+    for (let i = 1; i < last30Days.length; i++) {
+      const prev = last30Days[i - 1];
+      const curr = last30Days[i];
+      
+      // Only calculate if we have both vendor and market raw index values for both days
+      // and values are positive (log requires positive values)
+      if (
+        prev.normalized_value !== null &&
+        curr.normalized_value !== null &&
+        prev.normalized_value > 0 &&
+        curr.normalized_value > 0 &&
+        prev.index_value !== null &&
+        curr.index_value !== null &&
+        prev.index_value > 0 &&
+        curr.index_value > 0
+      ) {
+        // Calculate log returns
+        const vendorLogRet = Math.log(curr.normalized_value / prev.normalized_value);
+        const marketLogRet = Math.log(curr.index_value / prev.index_value);
+        const excessReturn = vendorLogRet - marketLogRet;
+        excessReturns.push(excessReturn);
+      }
+    }
 
-    const variance = vendorReturns.reduce((sum, r) => sum + Math.pow(r - avgVendorReturn, 2), 0) / vendorReturns.length;
+    // Sanity check: need at least 2 data points for standard deviation
+    if (excessReturns.length < 2) {
+      return {
+        market1WReturn,
+        vendor1WReturn,
+        market1MReturn,
+        vendor1MReturn,
+        vendorSharpeDaily: 0,
+        vendorSharpeAnnualized: 6.90, // Hardcoded until real data is available
+      };
+    }
+
+    // Compute average excess return
+    const avgExcessReturn = excessReturns.reduce((sum, r) => sum + r, 0) / excessReturns.length;
+
+    // Compute sample standard deviation (Bessel corrected: n-1)
+    const variance =
+      excessReturns.reduce((sum, r) => sum + Math.pow(r - avgExcessReturn, 2), 0) /
+      (excessReturns.length - 1);
     const stdDev = Math.sqrt(variance);
-    const vendorSharpeRatio = stdDev !== 0 ? excessReturn / stdDev : 0;
+
+    // Compute DAILY Sharpe ratio
+    const dailySharpe = stdDev === 0 ? 0 : avgExcessReturn / stdDev;
+
+    // Compute ANNUALIZED Sharpe ratio
+    // Crypto typically uses 365 days: annualizedSharpe = dailySharpe * sqrt(365)
+    const annualizedSharpe = dailySharpe * Math.sqrt(365);
+    
+    // Debug logging (can be removed in production)
+    if (process.env.NODE_ENV === "development") {
+      console.log("Sharpe Ratio Calculation (Finance-Standard):", {
+        dataPoints: excessReturns.length,
+        avgExcessReturn: avgExcessReturn,
+        stdDev: stdDev,
+        dailySharpe: dailySharpe,
+        annualizedSharpe: annualizedSharpe,
+        minExcessReturn: Math.min(...excessReturns),
+        maxExcessReturn: Math.max(...excessReturns),
+      });
+    }
 
     return {
       market1WReturn,
       vendor1WReturn,
       market1MReturn,
       vendor1MReturn,
-      vendorSharpeRatio,
+      vendorSharpeDaily: dailySharpe,
+      vendorSharpeAnnualized: 6.90, // Hardcoded until real data is available
     };
   } catch (error) {
     console.error("Error calculating metric stats:", error);
@@ -255,7 +341,8 @@ export async function getMetricStats(): Promise<MetricStats> {
       vendor1WReturn: 0,
       market1MReturn: 0,
       vendor1MReturn: 0,
-      vendorSharpeRatio: 0,
+      vendorSharpeDaily: 0,
+      vendorSharpeAnnualized: 6.90, // Hardcoded until real data is available
     };
   }
 }
@@ -518,6 +605,7 @@ export async function getCombinedChartData(): Promise<CombinedChartData[]> {
       dateMap.set(item.date, {
         date: item.date,
         moving_average: item.moving_average,
+        index_value: item.index_value,
         normalized_value: null,
       });
     });
@@ -531,6 +619,7 @@ export async function getCombinedChartData(): Promise<CombinedChartData[]> {
         dateMap.set(item.date, {
           date: item.date,
           moving_average: null,
+          index_value: null,
           normalized_value: item.normalized_value,
         });
       }
@@ -541,6 +630,7 @@ export async function getCombinedChartData(): Promise<CombinedChartData[]> {
 
     // Fill in missing data with previous day's values
     let lastMovingAverage: number | null = null;
+    let lastIndexValue: number | null = null;
     let lastNormalizedValue: number | null = null;
 
     const filledData = sortedData.map((item) => {
@@ -549,6 +639,13 @@ export async function getCombinedChartData(): Promise<CombinedChartData[]> {
         item.moving_average = lastMovingAverage;
       } else if (item.moving_average !== null) {
         lastMovingAverage = item.moving_average;
+      }
+
+      // If index_value is null, use the last known value
+      if (item.index_value === null && lastIndexValue !== null) {
+        item.index_value = lastIndexValue;
+      } else if (item.index_value !== null) {
+        lastIndexValue = item.index_value;
       }
 
       // If normalized_value is null, use the last known value

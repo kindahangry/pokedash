@@ -59,18 +59,29 @@ const NavItemExpanded = ({
               <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
             </SidebarMenuButton>
           ) : (
-            <SidebarMenuButton
-              asChild
-              aria-disabled={item.comingSoon}
-              isActive={isActive(item.url)}
-              tooltip={item.title}
-            >
-              <Link href={item.url} target={item.newTab ? "_blank" : undefined}>
+            item.comingSoon ? (
+              <SidebarMenuButton
+                disabled
+                aria-disabled={true}
+                isActive={isActive(item.url)}
+                tooltip={item.title}
+              >
                 {item.icon && <item.icon />}
                 <span>{item.title}</span>
-                {item.comingSoon && <IsComingSoon />}
-              </Link>
-            </SidebarMenuButton>
+                <IsComingSoon />
+              </SidebarMenuButton>
+            ) : (
+              <SidebarMenuButton
+                asChild
+                isActive={isActive(item.url)}
+                tooltip={item.title}
+              >
+                <Link href={item.url} target={item.newTab ? "_blank" : undefined}>
+                  {item.icon && <item.icon />}
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            )
           )}
         </CollapsibleTrigger>
         {item.subItems && (
@@ -168,17 +179,29 @@ export function NavMain({ items }: NavMainProps) {
                   if (!item.subItems) {
                     return (
                       <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          asChild
-                          aria-disabled={item.comingSoon}
-                          tooltip={item.title}
-                          isActive={isItemActive(item.url)}
-                        >
-                          <Link href={item.url} target={item.newTab ? "_blank" : undefined}>
+                        {item.comingSoon ? (
+                          <SidebarMenuButton
+                            disabled
+                            aria-disabled={true}
+                            tooltip={item.title}
+                            isActive={isItemActive(item.url)}
+                          >
                             {item.icon && <item.icon />}
                             <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
+                            <IsComingSoon />
+                          </SidebarMenuButton>
+                        ) : (
+                          <SidebarMenuButton
+                            asChild
+                            tooltip={item.title}
+                            isActive={isItemActive(item.url)}
+                          >
+                            <Link href={item.url} target={item.newTab ? "_blank" : undefined}>
+                              {item.icon && <item.icon />}
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        )}
                       </SidebarMenuItem>
                     );
                   }

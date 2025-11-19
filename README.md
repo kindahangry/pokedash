@@ -1,104 +1,51 @@
-# Next.js Admin Template with TypeScript & Shadcn UI
+# PokeDash
 
-**Studio Admin** - Includes multiple dashboards, authentication layouts, customizable theme presets, and more.
-
-<img src="https://github.com/arhamkhnz/next-shadcn-admin-dashboard/blob/main/media/dashboard.png?version=4" alt="Dashboard Screenshot">
-
-Most admin templates I found, free or paid, felt cluttered, outdated, or too rigid. I built this as a cleaner alternative with features often missing in others, such as theme toggling and layout controls, while keeping the design modern, minimal, and flexible.
-
-I’ve taken design inspiration from various sources. If you’d like credit for something specific, feel free to open an issue or reach out.
-
-> **View demo:** [studio admin](https://next-shadcn-admin-dashboard.vercel.app)
-
-> [!TIP]
-> I’m also working on Nuxt.js, Svelte, and React (Vite + TanStack Router) versions of this dashboard. They’ll be live soon.
+A Pokemon card analytics dashboard built with Next.js, providing real-time market data, price tracking, and vendor performance analytics.
 
 ## Features
 
-- Built with Next.js 15, TypeScript, Tailwind CSS v4, and Shadcn UI  
-- Responsive and mobile-friendly  
-- Customizable theme presets (light/dark modes with color schemes like Tangerine, Brutalist, and more)  
-- Flexible layouts (collapsible sidebar, variable content widths)  
-- Authentication flows and screens  
-- Prebuilt dashboards (Default, CRM, Finance) with more coming soon  
-- Role-Based Access Control (RBAC) with config-driven UI and multi-tenant support *(planned)*  
-
-> [!NOTE]
-> The default dashboard uses the **shadcn neutral** theme.  
-> It also includes additional color presets inspired by [Tweakcn](https://tweakcn.com):  
->
-> - Tangerine  
-> - Neo Brutalism  
-> - Soft Pop  
->
-> You can create more presets by following the same structure as the existing ones.  
-
-> Looking for the **Next.js 14 + Tailwind CSS v3** version?  
-> Check out the [`archive/next14-tailwindv3`](https://github.com/arhamkhnz/next-shadcn-admin-dashboard/tree/archive/next14-tailwindv3) branch.  
-> It has a different color theme and is not actively maintained, but I try to keep it updated with major changes.  
+- **Market Overview**: Browse Pokemon cards with current prices and 24-hour price changes
+- **Price Tracking**: Real-time price data from graded card markets
+- **Vendor Analytics**: Performance metrics and normalized value tracking
+- **Modern UI**: Built with Next.js 15, TypeScript, Tailwind CSS, and Shadcn UI
+- **Responsive Design**: Mobile-friendly interface with collapsible sidebar
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 (App Router), TypeScript, Tailwind CSS v4  
-- **UI Components**: Shadcn UI  
-- **Validation**: Zod  
-- **Forms & State Management**: React Hook Form, Zustand  
-- **Tables & Data Handling**: TanStack Table  
-- **Tooling & DX**: ESLint, Prettier, Husky  
-
-## Screens
-
-### Available
-- Default Dashboard  
-- CRM Dashboard  
-- Finance Dashboard  
-- Authentication (4 screens)
-
-### Coming Soon
-- Analytics Dashboard  
-- eCommerce Dashboard  
-- Academy Dashboard  
-- Logistics Dashboard  
-- Email Page  
-- Chat Page  
-- Calendar Page  
-- Kanban Board  
-- Invoice Page  
-- Users Management  
-- Roles Management  
-
-## Colocation File System Architecture
-
-This project follows a **colocation-based architecture** each feature keeps its own pages, components, and logic inside its route folder.  
-Shared UI, hooks, and configuration live at the top level, making the codebase modular, scalable, and easier to maintain as the app grows.
-
-For a full breakdown of the structure with examples, see the [Next Colocation Template](https://github.com/arhamkhnz/next-colocation-template).
+- **Framework**: Next.js 15 (App Router), TypeScript
+- **Styling**: Tailwind CSS v4
+- **UI Components**: Shadcn UI
+- **Database**: Supabase (PostgreSQL)
+- **Charts**: Recharts
+- **Icons**: Lucide React
 
 ## Getting Started
 
-You can run this project locally, or deploy it instantly with Vercel.
+### Prerequisites
 
-### Deploy with Vercel
+- Node.js 18+ and npm
+- Supabase account and project
+- Environment variables configured (see below)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Farhamkhnz%2Fnext-shadcn-admin-dashboard)
-
-_Deploy your own copy with one click._
-
-### Run locally
+### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/arhamkhnz/next-shadcn-admin-dashboard.git
+   git clone <your-repo-url>
+   cd pokedash
    ```
-   
-2. **Navigate into the project**
+
+2. **Install dependencies**
    ```bash
-    cd next-shadcn-admin-dashboard
+   npm install
    ```
+
+3. **Set up environment variables**
    
-3. **Install dependencies**
-   ```bash
-    npm install
+   Create a `.env.local` file in the root directory:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
 4. **Start the development server**
@@ -106,16 +53,41 @@ _Deploy your own copy with one click._
    npm run dev
    ```
 
-Your app will be running at [http://localhost:3000](http://localhost:3000)
+   The app will be available at [http://localhost:3000](http://localhost:3000)
 
----
+### Database Setup
 
-> [!IMPORTANT]  
-> This project is updated frequently. If you’re working from a fork or an older clone, pull the latest changes before syncing. Some updates may include breaking changes.
+The application requires the following Supabase tables:
+- `cards` - Card information with images and metadata
+- `card_prices_graded` - Historical price data for graded cards
+- `vendor_performance_linear` - Vendor performance metrics
 
----
+Ensure Row Level Security (RLS) policies are configured appropriately for your use case.
 
-Contributions are welcome. Feel free to open issues, feature requests, or start a discussion.
+## Project Structure
 
+```
+src/
+├── app/                    # Next.js routes
+│   ├── (main)/            # Main application routes
+│   │   └── dashboard/     # Dashboard pages
+│   │       ├── market/    # Market overview
+│   │       ├── overview/   # Main dashboard
+│   │       └── ...
+│   └── layout.tsx         # Root layout
+├── components/            # Reusable UI components
+├── config/                # App configuration
+├── server/                # Server actions and API logic
+└── lib/                   # Utilities and helpers
+```
 
-**Happy Vibe Coding!**
+## Available Scripts
+
+- `npm run dev` - Start development server with Turbopack
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run format` - Format code with Prettier
+
+## License
+
+MIT License - see LICENSE file for details

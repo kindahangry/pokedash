@@ -117,19 +117,19 @@ export async function SectionCards() {
         <CardHeader>
           <CardDescription>Vendor Sharpe Ratio</CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {formatSharpe(stats.vendorSharpeRatio)}
+            {formatSharpe(stats.vendorSharpeAnnualized)}
           </CardTitle>
           <CardAction>
             <Badge variant="outline">
-              {stats.vendorSharpeRatio >= 0 ? <TrendingUp /> : <TrendingDown />}
-              {getSharpeLabel(stats.vendorSharpeRatio)}
+              {stats.vendorSharpeAnnualized >= 0 ? <TrendingUp /> : <TrendingDown />}
+              {getSharpeLabel(stats.vendorSharpeAnnualized)}
             </Badge>
           </CardAction>
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
-            {stats.vendorSharpeRatio >= 0 ? "Outperforming" : "Underperforming"} market{" "}
-            {stats.vendorSharpeRatio >= 0 ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
+            {stats.vendorSharpeAnnualized >= 0 ? "Outperforming" : "Underperforming"} market{" "}
+            {stats.vendorSharpeAnnualized >= 0 ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
           </div>
           <div className="text-muted-foreground">Risk-adjusted vs Pokemon Index</div>
         </CardFooter>

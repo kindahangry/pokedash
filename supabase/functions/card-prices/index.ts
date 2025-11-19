@@ -53,37 +53,96 @@ const CARDS = [
 ];
 
 const GRADES = ["PSA 10"];
+const CONCURRENCY = 5;
+const API_TIMEOUT_MS = 9000;
 
-serve(async () => {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+// Simple concurrency limiter using chunks
+async function runWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = [];
 
-  let updated = 0;
-  let noData = 0;
-  let errors = 0;
-  const results = [];
-  const today = new Date().toISOString().split("T")[0];
+  // Process items in chunks
+  for (let i = 0; i < items.length; i += limit) {
+    const chunk = items.slice(i, i + limit);
+    const chunkResults = await Promise.allSettled(chunk.map(fn));
+    results.push(...chunkResults);
+  }
 
-  for (const card of CARDS) {
-    const grade = "PSA 10";
+  return results;
+}
+
+// Check if entry exists using optimized query
+async function entryExists(
+  supabase: any,
+  cardId: string,
+  grade: string,
+  date: string
+): Promise<boolean> {
+  try {
+    const { count } = await supabase
+      .from("card_prices_graded")
+      .select("id", { count: "exact", head: true })
+      .eq("card_id", cardId)
+      .eq("grade", grade)
+      .eq("date", date);
+
+    return (count ?? 0) > 0;
+  } catch (error) {
+    console.error(`Error checking entry existence for ${cardId}:`, error);
+    return false;
+  }
+}
+
+// Get last known price as fallback
+async function getLastKnownPrice(
+  supabase: any,
+  cardId: string,
+  grade: string
+): Promise<number | null> {
+  try {
+    const { data: last } = await supabase
+      .from("card_prices_graded")
+      .select("price_usd")
+      .eq("card_id", cardId)
+      .eq("grade", grade)
+      .order("date", { ascending: false })
+      .limit(1);
+
+    if (!last || last.length === 0) {
+      return null;
+    }
+
+    const price = last[0].price_usd;
+    return typeof price === "string" ? parseFloat(price) : price;
+  } catch (error) {
+    console.error(`Error fetching last known price for ${cardId}:`, error);
+    return null;
+  }
+}
+
+// Handle a single card with timeout and error handling
+async function handleCard(
+  card: { id: string; name: string },
+  supabase: any,
+  today: string,
+  grade: string
+): Promise<{ card_id: string; card_name: string; grade: string; price_usd: number; date: string } | null> {
+  try {
+    // Check if today's entry exists
+    const exists = await entryExists(supabase, card.id, grade, today);
+    if (exists) {
+      return null; // Skip if already exists
+    }
+
+    // API call with timeout
+    let price_usd: number | null = null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
     try {
-      console.log(`🔍 Checking ${card.name}...`);
-
-      // Check if today's entry exists
-      const { data: todayEntry } = await supabase
-        .from("card_prices_graded")
-        .select("id")
-        .eq("card_id", card.id)
-        .eq("grade", grade)
-        .eq("date", today)
-        .limit(1);
-
-      if (todayEntry && todayEntry.length > 0) {
-        console.log(`ℹ️ Already have today's price.`);
-        continue;
-      }
-
-      // API call
       const res = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -91,82 +150,95 @@ serve(async () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ card_id: card.id, grade }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeout);
+
       if (!res.ok) {
-        console.error(`❌ API HTTP error: ${res.status}`);
-        errors++;
-        continue;
+        throw new Error(`API HTTP error: ${res.status}`);
       }
 
       const data: CardPricesResponse = await res.json();
 
       if (data.error) {
-        console.warn(`🚫 API returned error: ${data.error}`);
-        errors++;
-        continue;
+        throw new Error(`API returned error: ${data.error}`);
       }
-
-      let price_usd: number | null = null;
 
       if (data.prices && data.prices.length > 0) {
         const latest = data.prices[0];
         price_usd = typeof latest.price === "string" ? parseFloat(latest.price) : latest.price;
-      } else {
-        // Fallback to last known price
-        const { data: last } = await supabase
-          .from("card_prices_graded")
-          .select("price_usd")
-          .eq("card_id", card.id)
-          .eq("grade", grade)
-          .order("date", { ascending: false })
-          .limit(1);
-
-        if (!last || last.length === 0) {
-          console.log(`❌ No API or historical price available.`);
-          noData++;
-          continue;
-        }
-
-        price_usd = typeof last[0].price_usd === "string"
-          ? parseFloat(last[0].price_usd)
-          : last[0].price_usd;
       }
-
-      // Insert today's price
-      const { error: insertError } = await supabase
-        .from("card_prices_graded")
-        .insert({
-          card_id: card.id,
-          card_name: card.name,
-          grade,
-          price_usd,
-          date: today,
-        });
-
-      if (insertError) {
-        console.error(`❌ Insert error: ${insertError.message}`);
-        errors++;
-      } else {
-        console.log(`✅ Added ${card.name}: $${price_usd}`);
-        updated++;
-        results.push({ card: card.name, price_usd });
-      }
-
     } catch (error) {
-      console.error(`⚠️ Unexpected error:`, error);
-      errors++;
+      clearTimeout(timeout);
+      if (error.name === "AbortError") {
+        console.error(`Timeout fetching price for ${card.name}`);
+        return { error: "timeout" } as any;
+      }
+      // Fall through to fallback logic
+    }
+
+    // Fallback to last known price if API failed
+    if (price_usd === null) {
+      price_usd = await getLastKnownPrice(supabase, card.id, grade);
+      if (price_usd === null) {
+        return null; // No data available
+      }
+    }
+
+    // Prepare row for batch insert
+    return {
+      card_id: card.id,
+      card_name: card.name,
+      grade,
+      price_usd,
+      date: today,
+    };
+  } catch (error) {
+    console.error(`Error processing ${card.name}:`, error);
+    return null;
+  }
+}
+
+serve(async () => {
+  const start = performance.now();
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const today = new Date().toISOString().split("T")[0];
+  const grade = "PSA 10";
+
+  // Process all cards in parallel with concurrency limit
+  const settled = await runWithLimit(CARDS, CONCURRENCY, (card) =>
+    handleCard(card, supabase, today, grade)
+  );
+
+  // Collect successful results for batch insert
+  const rowsToInsert = settled
+    .filter((r) => r.status === "fulfilled" && r.value !== null && !(r.value as any).error)
+    .map((r) => (r as PromiseFulfilledResult<any>).value);
+
+  // Count errors
+  const errors = settled.filter(
+    (r) => r.status === "rejected" || (r.status === "fulfilled" && ((r.value as any)?.error || r.value === null))
+  ).length;
+
+  // Single batch insert
+  if (rowsToInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("card_prices_graded")
+      .insert(rowsToInsert);
+
+    if (insertError) {
+      console.error(`Batch insert error: ${insertError.message}`);
     }
   }
 
-  return new Response(
-    JSON.stringify({
-      message: `Processed ${CARDS.length} cards`,
-      updated,
-      noData,
-      errors,
-      results,
-    }),
-    { headers: { "Content-Type": "application/json" } }
-  );
+  const elapsedMs = Math.round(performance.now() - start);
+  console.log(`Processed ${CARDS.length} cards, inserted ${rowsToInsert.length} in ${elapsedMs}ms`);
+
+  return Response.json({
+    processed: CARDS.length,
+    inserted: rowsToInsert.length,
+    errors,
+    time_ms: elapsedMs,
+  });
 });

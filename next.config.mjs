@@ -15,12 +15,17 @@ const nextConfig = {
     return [
       {
         source: "/",
-        destination: "/dashboard/overview",
+        destination: "/overview",
         permanent: false,
       },
       {
         source: "/dashboard",
-        destination: "/dashboard/overview",
+        destination: "/overview",
+        permanent: false,
+      },
+      {
+        source: "/dashboard/:path*",
+        destination: "/:path*",
         permanent: false,
       },
     ];

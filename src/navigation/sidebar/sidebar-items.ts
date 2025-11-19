@@ -32,24 +32,24 @@ export const sidebarItems: NavGroup[] = [
     items: [
       {
         title: "Market",
-        url: "/dashboard/market",
+        url: "/market",
         icon: ShoppingCart,
       },
       {
         title: "Vendor",
-        url: "/dashboard/vendor",
+        url: "/vendor",
         icon: Store,
         comingSoon: true,
       },
       {
         title: "Vault",
-        url: "/dashboard/vault",
+        url: "/vault",
         icon: Vault,
         comingSoon: true,
       },
       {
         title: "About",
-        url: "/dashboard/about",
+        url: "/about",
         icon: Info,
         comingSoon: true,
       },

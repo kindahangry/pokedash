@@ -1,9 +1,9 @@
 name: Fetch Card Prices
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *"
+    - cron: "0 0 * * *"   # every day at midnight UTC
+  workflow_dispatch:
 
 jobs:
   fetch-prices:

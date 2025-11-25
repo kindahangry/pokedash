@@ -18,6 +18,8 @@ const API_URL = "https://api.cardhedger.com/v1/cards/prices-by-card";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const API_TIMEOUT_MS = 20000;
+const CONCURRENCY = 3;
 
 const CARDS = [
   { id: "1687993974477x685136523964710900", name: "Giratina V Alt Art (Lost Origin)" },
@@ -52,26 +54,51 @@ const CARDS = [
   { id: "1732936444785x801101407330903000", name: "Gengar & Mimikyu GX (Team Up)" },
 ];
 
-const GRADES = ["PSA 10"];
-const CONCURRENCY = 5;
-const API_TIMEOUT_MS = 9000;
-
-// Simple concurrency limiter using chunks
+// Concurrency limiter that processes items in parallel up to the limit
 async function runWithLimit<T, R>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<R>
 ): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = [];
+  let active = 0;
+  let index = 0;
 
-  // Process items in chunks
-  for (let i = 0; i < items.length; i += limit) {
-    const chunk = items.slice(i, i + limit);
-    const chunkResults = await Promise.allSettled(chunk.map(fn));
-    results.push(...chunkResults);
-  }
+  return new Promise((resolve) => {
+    async function runNext() {
+      // If we've processed all items, wait for active ones to finish
+      if (index >= items.length) {
+        if (active === 0) {
+          resolve(results);
+        }
+        return;
+      }
 
-  return results;
+      // Start new tasks up to the limit
+      while (active < limit && index < items.length) {
+        const currentIndex = index++;
+        active++;
+
+        await new Promise(res => setTimeout(res, 300));
+
+        Promise.resolve(fn(items[currentIndex]))
+          .then(
+            (value) => {
+              results[currentIndex] = { status: "fulfilled" as const, value };
+            },
+            (reason) => {
+              results[currentIndex] = { status: "rejected" as const, reason };
+            }
+          )
+          .finally(() => {
+            active--;
+            runNext();
+          });
+      }
+    }
+
+    runNext();
+  });
 }
 
 // Check if entry exists using optimized query
@@ -93,6 +120,92 @@ async function entryExists(
   } catch (error) {
     console.error(`Error checking entry existence for ${cardId}:`, error);
     return false;
+  }
+}
+
+// Handle a single card with timeout and error handling
+async function handleCard(
+  card: { id: string; name: string },
+  supabase: any,
+  today: string,
+  grade: string
+): Promise<{ card_id: string; card_name: string; grade: string; price_usd: number; date: string } | null> {
+  try {
+    // Check if today's entry exists
+    const exists = await entryExists(supabase, card.id, grade, today);
+    if (exists) {
+      return null; // Skip if already exists
+    }
+
+    // API call with timeout - always attempt for all card IDs
+    let price_usd: number | null = null;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "X-API-Key": API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ card_id: card.id, grade: "psa10" }),
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeout);
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`API returned HTTP error: ${res.status}`, errorText);
+        throw new Error(`API HTTP error: ${res.status}`);
+      }
+
+      const data: CardPricesResponse = await res.json();
+
+      if (data.error) {
+        throw new Error(`API returned error: ${data.error}`);
+      }
+
+      if (data.prices && data.prices.length > 0) {
+        const latest = data.prices[0];
+        price_usd = typeof latest.price === "string" ? parseFloat(latest.price) : latest.price;
+      }
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.error(`Timeout fetching price for ${card.name}`);
+        // Don't return early - let fallback logic handle it
+        price_usd = null;
+      } else {
+        // For other errors, also fall through to fallback logic
+        console.error(`Error fetching price for ${card.name}:`, error.message || error);
+        price_usd = null;
+      }
+    }
+
+    // Fallback to last known price if API failed
+    if (price_usd === null) {
+      price_usd = await getLastKnownPrice(supabase, card.id, grade);
+      if (price_usd === null) {
+        return null; // No data available
+      }
+      console.log(`Fallback price for ${card.name}: $${price_usd}`);
+    } else {
+      console.log(`API price for ${card.name}: $${price_usd}`);
+    }
+
+    // Prepare row for batch insert
+    return {
+      card_id: card.id,
+      card_name: card.name,
+      grade,
+      price_usd,
+      date: today,
+    };
+  } catch (error) {
+    console.error(`Error processing ${card.name}:`, error);
+    return null;
   }
 }
 
@@ -123,122 +236,58 @@ async function getLastKnownPrice(
   }
 }
 
-// Handle a single card with timeout and error handling
-async function handleCard(
-  card: { id: string; name: string },
-  supabase: any,
-  today: string,
-  grade: string
-): Promise<{ card_id: string; card_name: string; grade: string; price_usd: number; date: string } | null> {
-  try {
-    // Check if today's entry exists
-    const exists = await entryExists(supabase, card.id, grade, today);
-    if (exists) {
-      return null; // Skip if already exists
-    }
 
-    // API call with timeout
-    let price_usd: number | null = null;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-    try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "X-API-Key": API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ card_id: card.id, grade }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!res.ok) {
-        throw new Error(`API HTTP error: ${res.status}`);
-      }
-
-      const data: CardPricesResponse = await res.json();
-
-      if (data.error) {
-        throw new Error(`API returned error: ${data.error}`);
-      }
-
-      if (data.prices && data.prices.length > 0) {
-        const latest = data.prices[0];
-        price_usd = typeof latest.price === "string" ? parseFloat(latest.price) : latest.price;
-      }
-    } catch (error) {
-      clearTimeout(timeout);
-      if (error.name === "AbortError") {
-        console.error(`Timeout fetching price for ${card.name}`);
-        return { error: "timeout" } as any;
-      }
-      // Fall through to fallback logic
-    }
-
-    // Fallback to last known price if API failed
-    if (price_usd === null) {
-      price_usd = await getLastKnownPrice(supabase, card.id, grade);
-      if (price_usd === null) {
-        return null; // No data available
-      }
-    }
-
-    // Prepare row for batch insert
-    return {
-      card_id: card.id,
-      card_name: card.name,
-      grade,
-      price_usd,
-      date: today,
-    };
-  } catch (error) {
-    console.error(`Error processing ${card.name}:`, error);
-    return null;
-  }
-}
-
-serve(async () => {
+serve(async (req: Request) => {
   const start = performance.now();
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const today = new Date().toISOString().split("T")[0];
-  const grade = "PSA 10";
+  const grade = "PSA 10"; // Database grade format (keep as is for DB queries)
 
-  // Process all cards in parallel with concurrency limit
-  const settled = await runWithLimit(CARDS, CONCURRENCY, (card) =>
-    handleCard(card, supabase, today, grade)
-  );
+  try {
+    // Process all cards in parallel with concurrency limit
+    const settled = await runWithLimit(CARDS, CONCURRENCY, (card) =>
+      handleCard(card, supabase, today, grade)
+    );
 
-  // Collect successful results for batch insert
-  const rowsToInsert = settled
-    .filter((r) => r.status === "fulfilled" && r.value !== null && !(r.value as any).error)
-    .map((r) => (r as PromiseFulfilledResult<any>).value);
+    // Collect successful results for batch insert
+    const rowsToInsert = settled
+      .filter((r) => r.status === "fulfilled" && r.value !== null && !(r.value as any).error)
+      .map((r) => (r as PromiseFulfilledResult<any>).value);
 
-  // Count errors
-  const errors = settled.filter(
-    (r) => r.status === "rejected" || (r.status === "fulfilled" && ((r.value as any)?.error || r.value === null))
-  ).length;
+    // Count errors
+    const errors = settled.filter(
+      (r) => r.status === "rejected" || (r.status === "fulfilled" && ((r.value as any)?.error || r.value === null))
+    ).length;
 
-  // Single batch insert
-  if (rowsToInsert.length > 0) {
-    const { error: insertError } = await supabase
-      .from("card_prices_graded")
-      .insert(rowsToInsert);
+    // Single batch insert
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from("card_prices_graded")
+        .insert(rowsToInsert);
 
-    if (insertError) {
-      console.error(`Batch insert error: ${insertError.message}`);
+      if (insertError) {
+        console.error(`Batch insert error: ${insertError.message}`);
+        return Response.json(
+          { error: `Database insert failed: ${insertError.message}` },
+          { status: 500 }
+        );
+      }
     }
+
+    const elapsedMs = Math.round(performance.now() - start);
+    console.log(`Processed ${CARDS.length} cards, inserted ${rowsToInsert.length} in ${elapsedMs}ms`);
+
+    return Response.json({
+      processed: CARDS.length,
+      inserted: rowsToInsert.length,
+      errors,
+      time_ms: elapsedMs,
+    });
+  } catch (error) {
+    console.error("Fatal error in card-prices function:", error);
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 }
+    );
   }
-
-  const elapsedMs = Math.round(performance.now() - start);
-  console.log(`Processed ${CARDS.length} cards, inserted ${rowsToInsert.length} in ${elapsedMs}ms`);
-
-  return Response.json({
-    processed: CARDS.length,
-    inserted: rowsToInsert.length,
-    errors,
-    time_ms: elapsedMs,
-  });
 });

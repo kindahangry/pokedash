@@ -1,4 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+// src/scripts/card-prices.js
+// CommonJS version for GitHub Actions (Node 18, no "type": "module")
+
+const { createClient } = require("@supabase/supabase-js");
 
 const API_KEY = process.env.CARDHEDGER_API_KEY;
 const API_URL = "https://api.cardhedger.com/v1/cards/prices-by-card";
@@ -49,17 +52,31 @@ async function fetchPrice(card) {
     body: JSON.stringify({ card_id: card.id, grade: "psa10" }),
   });
 
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
+
   const json = await res.json();
 
   if (!json.prices || json.prices.length === 0) {
     throw new Error("No price returned");
   }
 
-  return parseFloat(json.prices[0].price);
+  const latest = json.prices[0];
+  const price =
+    typeof latest.price === "string" ? parseFloat(latest.price) : latest.price;
+
+  if (!Number.isFinite(price)) {
+    throw new Error(`Invalid price value: ${latest.price}`);
+  }
+
+  return price;
 }
 
 async function main() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
   const today = new Date().toISOString().split("T")[0];
   const grade = "PSA 10";
 
@@ -68,7 +85,7 @@ async function main() {
   for (const card of CARDS) {
     try {
       const price = await fetchPrice(card);
-      console.log(`API price for ${card.name}: ${price}`);
+      console.log(`API price for ${card.name}: $${price}`);
 
       rows.push({
         card_id: card.id,
@@ -78,16 +95,27 @@ async function main() {
         date: today,
       });
 
-      await new Promise(r => setTimeout(r, 500)); // small cooldown
+      // small delay to be nice to API
+      await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
-      console.log(`Error for ${card.name}: ${err.message}`);
+      console.error(`Error for ${card.name}:`, err.message || err);
     }
   }
 
   if (rows.length > 0) {
-    await supabase.from("card_prices_graded").insert(rows);
+    const { error } = await supabase.from("card_prices_graded").insert(rows);
+    if (error) {
+      console.error("Supabase insert error:", error.message || error);
+      process.exitCode = 1;
+      return;
+    }
     console.log(`Inserted ${rows.length} rows.`);
+  } else {
+    console.log("No rows to insert.");
   }
 }
 
-main();
+main().catch((err) => {
+  console.error("Fatal error in card price script:", err);
+  process.exit(1);
+});

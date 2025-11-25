@@ -1,9 +1,9 @@
 name: Fetch Card Prices
 
 on:
-  schedule:
-    - cron: "0 */12 * * *"   # every 12 hours
   workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
 
 jobs:
   fetch-prices:
@@ -19,7 +19,7 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        run: npm install @supabase/supabase-js node-fetch
+        run: npm install
 
       - name: Run card price script
         env:

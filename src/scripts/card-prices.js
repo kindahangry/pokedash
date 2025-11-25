@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 import { createClient } from "@supabase/supabase-js";
 
 const API_KEY = process.env.CARDHEDGER_API_KEY;

@@ -1,7 +1,8 @@
 // src/scripts/card-prices.js
-// CommonJS version for GitHub Actions (Node 18, no "type": "module")
+// CommonJS version for GitHub Actions (Node 18)
 
 const { createClient } = require("@supabase/supabase-js");
+const fetch = require("node-fetch");
 
 const API_KEY = process.env.CARDHEDGER_API_KEY;
 const API_URL = "https://api.cardhedger.com/v1/cards/prices-by-card";
@@ -39,7 +40,7 @@ const CARDS = [
   { id: "1732936704151x306860576612707500", name: "Latias & Latios GX (Team Up)" },
   { id: "1690595778499x764267752847841400", name: "Charizard (XY Evolutions)" },
   { id: "1733793572965x243517925067338940", name: "M Rayquaza EX (XY Ancient Origins)" },
-  { id: "1732936444785x801101407330903000", name: "Gengar & Mimikyu GX (Team Up)" },
+  { id: "1732936444785x801101407330903000", name: "Gengar & Mimikyu GX (Team Up)" }
 ];
 
 async function fetchPrice(card) {
@@ -49,7 +50,11 @@ async function fetchPrice(card) {
       "X-API-Key": API_KEY,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ card_id: card.id, grade: "psa10" }),
+    body: JSON.stringify({
+      card_id: card.id,
+      grade: "PSA 10",  // FIXED
+      days: 180         // Recommended by CardHedge
+    }),
   });
 
   if (!res.ok) {
@@ -63,9 +68,9 @@ async function fetchPrice(card) {
     throw new Error("No price returned");
   }
 
+  // CardHedge returns: { "Grade": "PSA 10", "price": "123.45", ... }
   const latest = json.prices[0];
-  const price =
-    typeof latest.price === "string" ? parseFloat(latest.price) : latest.price;
+  const price = parseFloat(latest.price);
 
   if (!Number.isFinite(price)) {
     throw new Error(`Invalid price value: ${latest.price}`);
@@ -95,24 +100,26 @@ async function main() {
         date: today,
       });
 
-      // small delay to be nice to API
-      await new Promise((r) => setTimeout(r, 500));
+      // Delay to avoid rate limits
+      await new Promise((r) => setTimeout(r, 600));
     } catch (err) {
       console.error(`Error for ${card.name}:`, err.message || err);
     }
   }
 
-  if (rows.length > 0) {
-    const { error } = await supabase.from("card_prices_graded").insert(rows);
-    if (error) {
-      console.error("Supabase insert error:", error.message || error);
-      process.exitCode = 1;
-      return;
-    }
-    console.log(`Inserted ${rows.length} rows.`);
-  } else {
+  if (rows.length === 0) {
     console.log("No rows to insert.");
+    return;
   }
+
+  const { error } = await supabase.from("card_prices_graded").insert(rows);
+
+  if (error) {
+    console.error("Supabase insert error:", error.message);
+    process.exit(1);
+  }
+
+  console.log(`Inserted ${rows.length} rows.`);
 }
 
 main().catch((err) => {

@@ -2,7 +2,6 @@
 // CommonJS version for GitHub Actions (Node 18)
 
 const { createClient } = require("@supabase/supabase-js");
-const fetch = require("node-fetch");
 
 const API_KEY = process.env.CARDHEDGER_API_KEY;
 const API_URL = "https://api.cardhedger.com/v1/cards/prices-by-card";

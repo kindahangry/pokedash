@@ -4,7 +4,7 @@ export default function AboutPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold">About PokeDash</h1>
+        <h1 className="text-3xl font-bold">About Pokedash</h1>
         <p className="text-muted-foreground">
           Blockchain-powered Pokemon card investment platform
         </p>
@@ -12,11 +12,11 @@ export default function AboutPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>What is PokeDash?</CardTitle>
+          <CardTitle>What is Pokedash?</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
-            PokeDash is a revolutionary blockchain-based investment platform that allows users to
+            Pokedash is a revolutionary blockchain-based investment platform that allows users to
             participate in the Pokemon card market without the hassle of storage, authentication, or
             sales operations.
           </p>

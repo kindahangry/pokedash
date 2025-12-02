@@ -1,4 +1,4 @@
-# PokeDash
+# Pokedash
 
 A Pokemon card analytics dashboard built with Next.js, providing real-time market data, price tracking, and vendor performance analytics.
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**PokeDash** is a Pokemon card analytics dashboard built with Next.js 15, TypeScript, Tailwind CSS v4, and shadcn/ui. The project provides real-time market data, price tracking, and vendor performance analytics for Pokemon cards.
+**Pokedash** is a Pokemon card analytics dashboard built with Next.js 15, TypeScript, Tailwind CSS v4, and shadcn/ui. The project provides real-time market data, price tracking, and vendor performance analytics for Pokemon cards.
 
 ## Development Commands
 

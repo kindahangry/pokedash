@@ -3,12 +3,12 @@ import packageJson from "../../package.json";
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "PokeDash",
+  name: "Pokedash",
   version: packageJson.version,
-  copyright: `© ${currentYear}, PokeDash.`,
+  copyright: `© ${currentYear}, Pokedash.`,
   meta: {
-    title: "PokeDash",
+    title: "Pokedash",
     description:
-      "PokeDash is a Pokemon analytics dashboard built with Next.js 15, Tailwind CSS v4, and shadcn/ui.",
+      "Pokedash is a Pokemon analytics dashboard built with Next.js 15, Tailwind CSS v4, and shadcn/ui.",
   },
 };

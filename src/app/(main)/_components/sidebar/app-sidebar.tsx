@@ -24,7 +24,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
               <Link href="/overview">
-                <Image src="/favicon.ico" alt="PokeDash" width={28} height={28} className="size-7" />
+                <Image src="/favicon.ico" alt="Pokedash" width={28} height={28} className="size-7" />
                 <span className="text-base font-semibold">{APP_CONFIG.name}</span>
               </Link>
             </SidebarMenuButton>
